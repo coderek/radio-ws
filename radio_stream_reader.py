@@ -13,7 +13,6 @@ def listen_to_station(station, radio_streamer):
   conn = HTTPConnection(url.hostname, timeout=4)
   conn.request('get', url.path, headers={'Icy-MetaData': '1'})
   res = conn.getresponse()
-  # print(res.msg)
 
   metaint = int(res.getheader('icy-metaint', '0'))
 
@@ -32,7 +31,15 @@ def listen_to_station(station, radio_streamer):
         bytes = res.read(l)
         txt = bytes.decode()
         parts = [[parse(unquote(p.strip(' \'\"'))) for p in phrase.split('=')] for phrase in txt.strip().split(';')[:-1]]
-        radio_streamer.messages.put(parts, timeout=1)
+        obj = {'title': parts[0][1]}
+        try:
+          if 'current_song' in parts[1][1]:
+            obj['coverUrl'] = parts[1][1]['current_song']['coverUrl']
+        except Exception as e:
+          print(e)
+
+
+        radio_streamer.messages.put(obj, timeout=1)
     except Exception as e:
       print(e)
       res.close()
