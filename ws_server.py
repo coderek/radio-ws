@@ -6,9 +6,11 @@ from SimpleWebSocketServer import SimpleWebSocketServer, WebSocket
 from queue import Queue, Empty
 from threading import Thread
 from radio_stream_reader import listen_to_station
+from logger import logger
 
 RE_STATION_CHANGE = r'CHANGE_STATION\|(\d{2,3}\.\d)'
 current_stations = {}
+PORT = 8002
 
 
 res = requests.get('http://derekzeng.me/radio_stations')
@@ -36,7 +38,7 @@ class RadioStream:
     self.listeners = set()
     self.init_thread(station)
     self.init_consumer()
-    print('done init {}'.format(active_count()))
+    logger.info('done init {}'.format(active_count()))
 
   def dispatch(self, msg):
     for l in self.listeners:
@@ -48,11 +50,12 @@ class RadioStream:
       while host.running:
         try:
           msg = messages.get(timeout=1)
+          logger.info(msg)
         except Empty:
           continue
 
         host.dispatch(msg)
-      print('closed consumer thread {}'.format(active_count()))
+      logger.info('closed consumer thread {}'.format(active_count()))
 
     self.consumer = Thread(target=consumer_thread, args=(self.messages, self))
     self.consumer.start()
@@ -93,27 +96,29 @@ class RadioMetaServer(WebSocket):
         if self.radio_station:
           self.radio_station.remove_listener(self)
       except Exception as e:
-        print(e)
+        logger.error(e)
 
       to = station_changed.group(1)
-      print('change station to {} {}'.format(to, active_count()))
+      logger.info('change station to {} {}'.format(to, active_count()))
       try:
         if not to in current_stations:
           self.radio_station = RadioStream(get_station(to))
           current_stations[to] = self.radio_station
         current_stations[to].add_listener(self)
       except Exception as e:
-        print(e)
+        logger.error(e)
 
   def handleConnected(self):
-    print(self.address, 'connected', self.server.connections.keys())
+    pass
+    # logger.info(self.address + ' connected ' + ', '.join(self.server.connections.keys()))
 
   def handleClose(self):
     if self.radio_station:
       self.radio_station.remove_listener(self)
       self.radio_station = None
 
-    print(self.address, 'closed')
+    logger.info(self.address + ' closed')
 
-server = SimpleWebSocketServer('', 8002, RadioMetaServer)
+server = SimpleWebSocketServer('', PORT, RadioMetaServer)
+logger.info("Start server at port {}".format(PORT))
 server.serveforever()

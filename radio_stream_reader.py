@@ -3,6 +3,7 @@ from threading import active_count
 from urllib.parse import unquote, urlparse
 import sys
 from http.client import HTTPConnection
+from logger import logger
 
 station = ("Yes 93.3", "http://mediacorp.rastream.com/933fm")
 
@@ -17,7 +18,7 @@ def listen_to_station(station, radio_streamer):
   metaint = int(res.getheader('icy-metaint', '0'))
 
   if not metaint:
-    print('Endpoint does not support icy-metaint')
+    logger.info('Endpoint does not support icy-metaint')
     return
 
   def parse(s):
@@ -36,18 +37,19 @@ def listen_to_station(station, radio_streamer):
           if 'current_song' in parts[1][1]:
             obj['coverUrl'] = parts[1][1]['current_song']['coverUrl']
         except Exception as e:
-          print(e)
+          logger.error(e)
 
 
         radio_streamer.messages.put(obj, timeout=1)
     except Exception as e:
-      print(e)
+      logger.info(e)
       res.close()
+      break
 
   if not res.closed:
     res.close()
 
   conn.close()
-  print('closed producer thread {} {}'.format(active_count(), res.closed))
+  logger.info('closed producer thread {} {}'.format(active_count(), res.closed))
 
   return
