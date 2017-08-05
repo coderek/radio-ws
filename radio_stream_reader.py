@@ -40,7 +40,7 @@ def listen_to_station(station, radio_streamer):
           logger.error(e)
 
 
-        radio_streamer.messages.put(obj, timeout=1)
+        radio_streamer.messages.put(obj)
     except Exception as e:
       logger.info(e)
       res.close()
