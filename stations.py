@@ -41,10 +41,8 @@ class Stations:
       logger.info('Requested station {} is not found'.format(name))
       return
 
-
     if cb in self.cb_registry:
-      self.unsubscribe_station(self.cb_registry, cb)
-      del self.cb_registry[cb]
+      self.unsubscribe_station(self.cb_registry.get(cb), cb)
 
     station_object = self.stations.get(name)
     if station_object.get('connection') == None:
@@ -52,20 +50,23 @@ class Stations:
         station_object['connection'] = Station(name, station_object.get('url'))
         station_object['connection'].on()
       except Exception as e:
-        logger.error(e)
+        logger.exception(e)
 
     self.subscribe_station(name, cb)
 
   def subscribe_station(self, name, cb):
+    logger.info('Subscribe_station to {}'.format(name))
     station_object = self.stations.get(name).get('connection')
     station_object.subscribe(cb)
     self.cb_registry[cb] = name
 
   def unsubscribe_station(self, name, cb):
+    logger.info('Unsubscribe_station from {}'.format(name))
     station_object = self.stations.get(name)
     if station_object.get('connection') != None:
       conn = station_object.get('connection')
       conn.unsubscribe(cb)
+      del self.cb_registry[cb]
       if conn.empty():
         conn.off()
         station_object['connection'] = None
@@ -94,20 +95,22 @@ class Station:
 
     # need to synchronize
     # connection thread may call on_message before last notify finishes
-    with self.lock:
-      self.notify(msg)
+    self.notify(msg)
 
   def notify(self, msg):
-    for callback in self.listeners:
-      callback(msg)
+    with self.lock:
+      for callback in self.listeners:
+        callback(msg)
 
   def subscribe(self, cb):
     logger.debug('Subscribe {} to {}'.format(cb, self))
-    self.listeners.add(cb)
+    with self.lock:
+      self.listeners.add(cb)
 
   def unsubscribe(self, cb):
     logger.debug('Unsubscribe {} from {}'.format(cb, self))
-    self.listeners.remove(cb)
+    with self.lock:
+      self.listeners.remove(cb)
 
   def _init_connection(self):
     if self.connection and self.connection.is_alive():
@@ -130,7 +133,7 @@ class Station:
     try:
       conn.request('get', url.path, headers={'Icy-MetaData': '1'})
     except Exception as e:
-      logger.error(e)
+      logger.exception(e)
       return
 
     res = conn.getresponse()
@@ -163,7 +166,7 @@ class Station:
 
           self.on_message(obj)
       except Exception as e:
-        logger.error(e)
+        logger.exception(e)
         res.close()
         break
 
@@ -175,7 +178,8 @@ class Station:
     self.on_disconnect()
 
   def empty(self):
-    return len(self.listeners) == 0
+    with self.lock:
+      return len(self.listeners) == 0
 
   def on_disconnect(self):
     logger.info('{} disconnected'.format(self))

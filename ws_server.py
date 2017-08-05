@@ -26,10 +26,13 @@ class RadioMetaServer(WebSocket):
     station_changed = re.match(RE_STATION_CHANGE, msg)
     if station_changed:
       to = station_changed.group(1)
-      stations.on_switch_station(to, self.send_message)
+      try:
+        stations.on_switch_station(to, self.send_message)
+      except Exception as e:
+        logger.exception(e)
 
   def send_message(self, msg):
-      return super().sendMessage(json.dumps(msg))
+    return super().sendMessage(json.dumps(msg))
 
   def handleConnected(self):
     pass
