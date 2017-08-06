@@ -10,7 +10,7 @@ from logger import logger
 from stations import Stations
 
 RE_STATION_CHANGE = r'CHANGE_STATION\|(\d{2,3}\.\d)'
-PORT = 8002
+PORT = 8080
 
 stations = Stations()
 
