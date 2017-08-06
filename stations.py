@@ -42,7 +42,7 @@ class Stations:
       return
 
     if cb in self.cb_registry:
-      self.unsubscribe_station(self.cb_registry.get(cb), cb)
+      self.unsubscribe_station(cb)
 
     station_object = self.stations.get(name)
     if station_object.get('connection') == None:
@@ -60,7 +60,13 @@ class Stations:
     station_object.subscribe(cb)
     self.cb_registry[cb] = name
 
-  def unsubscribe_station(self, name, cb):
+  def unsubscribe_station(self, cb):
+    name = self.cb_registry.get(cb)
+
+    if not name:
+      logger.warn('Unsubscribe unknown station')
+      return
+
     logger.info('Unsubscribe_station from {}'.format(name))
     station_object = self.stations.get(name)
     if station_object.get('connection') != None:
@@ -185,6 +191,7 @@ class Station:
     logger.info('{} disconnected'.format(self))
 
   def off(self):
+    logger.info('Turnning off {}'.format(self))
     self.running = False
 
   def __repr__(self):

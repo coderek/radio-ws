@@ -39,6 +39,7 @@ class RadioMetaServer(WebSocket):
     # logger.info(self.address + ' connected ' + ', '.join(self.server.connections.keys()))
 
   def handleClose(self):
+    stations.unsubscribe_station(self.send_message)
     logger.info(self.address + ' closed')
 
 server = SimpleWebSocketServer('', PORT, RadioMetaServer)
