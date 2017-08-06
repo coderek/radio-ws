@@ -5,7 +5,7 @@ from queue import Queue, Empty
 import json
 from urllib.parse import unquote, urlparse
 from http.client import HTTPConnection
-from threading import Thread, Lock
+from threading import Thread, RLock
 
 
 STATION_LIST_ENDPOINT = 'http://derekzeng.me/radio_stations'
@@ -13,6 +13,7 @@ STATION_LIST_ENDPOINT = 'http://derekzeng.me/radio_stations'
 class Stations:
 
   def __init__(self):
+    self.lock = RLock()
     self.stations = {}
     res = requests.get(STATION_LIST_ENDPOINT)
     if res.status_code >= 300 or res.status_code < 200:
@@ -28,54 +29,61 @@ class Stations:
     self.cb_registry = {}
 
   def on_switch_station(self, name, cb):
-    if re.match(r'^\d{2,3}\.\d$', name):
-      for sname in self.stations:
+    with self.lock:
+      if re.match(r'^\d{2,3}\.\d$', name):
+        for sname in self.stations:
+          try:
+            sname.index(name)
+            name = sname
+            break
+          except:
+            continue
+
+      if not name in self.stations:
+        logger.info('Requested station {} is not found'.format(name))
+        return
+
+      if cb in self.cb_registry:
+        self.unsubscribe_station(cb)
+
+      station_object = self.stations.get(name)
+      if station_object.get('connection') == None:
         try:
-          sname.index(name)
-          name = sname
-          break
-        except:
-          continue
+          station_object['connection'] = Station(name, station_object.get('url'))
+          station_object['connection'].on()
+        except Exception as e:
+          logger.exception(e)
+          return
 
-    if not name in self.stations:
-      logger.info('Requested station {} is not found'.format(name))
-      return
-
-    if cb in self.cb_registry:
-      self.unsubscribe_station(cb)
-
-    station_object = self.stations.get(name)
-    if station_object.get('connection') == None:
-      try:
-        station_object['connection'] = Station(name, station_object.get('url'))
-        station_object['connection'].on()
-      except Exception as e:
-        logger.exception(e)
-
-    self.subscribe_station(name, cb)
+      self.subscribe_station(name, cb)
+      if station_object.get('connection'):
+        if station_object.get('connection').last_message:
+          cb(station_object.get('connection').last_message)
 
   def subscribe_station(self, name, cb):
-    logger.info('Subscribe_station to {}'.format(name))
-    station_object = self.stations.get(name).get('connection')
-    station_object.subscribe(cb)
-    self.cb_registry[cb] = name
+    with self.lock:
+      logger.info('Subscribe_station to {}'.format(name))
+      station_object = self.stations.get(name).get('connection')
+      station_object.subscribe(cb)
+      self.cb_registry[cb] = name
 
   def unsubscribe_station(self, cb):
-    name = self.cb_registry.get(cb)
+    with self.lock:
+      name = self.cb_registry.get(cb)
 
-    if not name:
-      logger.warn('Unsubscribe unknown station')
-      return
+      if not name:
+        logger.warn('Unsubscribe unknown station')
+        return
 
-    logger.info('Unsubscribe_station from {}'.format(name))
-    station_object = self.stations.get(name)
-    if station_object.get('connection') != None:
-      conn = station_object.get('connection')
-      conn.unsubscribe(cb)
-      del self.cb_registry[cb]
-      if conn.empty():
-        conn.off()
-        station_object['connection'] = None
+      logger.info('Unsubscribe_station from {}'.format(name))
+      station_object = self.stations.get(name)
+      if station_object.get('connection') != None:
+        conn = station_object.get('connection')
+        conn.unsubscribe(cb)
+        del self.cb_registry[cb]
+        if conn.empty():
+          conn.off()
+          station_object['connection'] = None
 
 
 
@@ -83,13 +91,14 @@ class Station:
   connection = None
   name = None
   url = None
+  last_message = None
 
   def __init__(self, name, url):
     logger.info('Initializing station {} '.format(name))
     self.listeners = set([])
     self.name = name
     self.url = url
-    self.lock = Lock()
+    self.lock = RLock()
 
   def on(self):
     logger.info('Turnning on {}'.format(self))
@@ -171,6 +180,7 @@ class Station:
             continue
 
           self.on_message(obj)
+          self.last_message = obj
       except Exception as e:
         logger.exception(e)
         res.close()
